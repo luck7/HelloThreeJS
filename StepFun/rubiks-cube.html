@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>3D 魔方 · Three.js</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    overflow: hidden;
+    background: radial-gradient(circle at 50% 25%, #2b3a5c 0%, #151a26 45%, #0a0c12 100%);
+    color: #e8ecf4;
+    font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #scene { display: block; width: 100vw; height: 100vh; touch-action: none; cursor: grab; }
+  #scene:active { cursor: grabbing; }
+
+  .panel {
+    position: fixed; top: 18px; left: 18px; z-index: 10;
+    width: min(92vw, 330px);
+    padding: 14px 16px 16px;
+    background: rgba(20, 25, 38, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 16px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(14px) saturate(1.2);
+    -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  }
+  .title { display: flex; align-items: baseline; gap: 8px; }
+  .title h1 { margin: 0; font-size: 19px; letter-spacing: 1px; }
+  .title span { font-size: 11px; color: #8fa0c0; letter-spacing: 1px; }
+
+  .stats { display: flex; gap: 10px; margin: 12px 0 12px; }
+  .stat {
+    flex: 1; padding: 8px 10px; border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .stat .label { display: block; font-size: 11px; color: #93a2bd; margin-bottom: 2px; }
+  .stat .value {
+    display: block; font-size: 19px; font-weight: 700;
+    font-variant-numeric: tabular-nums; letter-spacing: 0.5px;
+  }
+  #last { color: #7ee0a3; }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .btn {
+    flex: 1 1 auto; min-width: 72px;
+    padding: 9px 12px; font-size: 13px; font-family: inherit;
+    color: #e8ecf4; background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 10px; cursor: pointer;
+    transition: transform .12s ease, background .2s ease, opacity .2s ease;
+  }
+  .btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.15); }
+  .btn:active:not(:disabled) { transform: scale(0.96); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.primary {
+    background: linear-gradient(135deg, #4f7cff, #8a5cff);
+    border-color: transparent; font-weight: 600;
+  }
+  .btn.primary:hover:not(:disabled) { background: linear-gradient(135deg, #6289ff, #9a70ff); }
+
+  .hint {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    padding: 7px 16px; border-radius: 999px; white-space: nowrap;
+    font-size: 12px; color: rgba(232, 236, 244, 0.6);
+    background: rgba(0, 0, 0, 0.28); border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  #toast {
+    position: fixed; bottom: 64px; left: 50%; transform: translate(-50%, 10px);
+    padding: 9px 18px; border-radius: 12px; font-size: 13px; z-index: 20;
+    background: rgba(18, 22, 33, 0.85); border: 1px solid rgba(255, 255, 255, 0.12);
+    opacity: 0; pointer-events: none; transition: opacity .25s ease, transform .25s ease;
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  #win {
+    position: fixed; inset: 0; z-index: 30;
+    display: grid; place-items: center;
+    background: rgba(6, 8, 14, 0.62);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  #win.hidden { display: none; }
+  .win-card {
+    width: min(88vw, 320px); padding: 28px 24px; text-align: center;
+    background: rgba(24, 29, 44, 0.9); border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 20px; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+    animation: pop .35s cubic-bezier(.2, 1.4, .4, 1) both;
+  }
+  @keyframes pop { from { transform: scale(.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .win-card .emoji { font-size: 46px; }
+  .win-card h2 { margin: 8px 0 6px; font-size: 20px; }
+  .win-card p { margin: 0 0 18px; font-size: 14px; color: #a9b6cd; font-variant-numeric: tabular-nums; }
+
+  @media (max-width: 480px) {
+    .panel { top: 12px; left: 12px; right: 12px; width: auto; padding: 12px 14px; }
+    .stat .value { font-size: 17px; }
+    .hint { font-size: 11px; }
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <div class="panel">
+    <div class="title"><h1>3×3 魔方</h1><span>THREE.JS</span></div>
+    <div class="stats">
+      <div class="stat"><span class="label">用时</span><span class="value" id="time">00:00.0</span></div>
+      <div class="stat"><span class="label">步数</span><span class="value" id="move-count">0</span></div>
+      <div class="stat"><span class="label">最近操作</span><span class="value" id="last">—</span></div>
+    </div>
+    <div class="actions">
+      <button class="btn primary" id="btn-scramble">打乱</button>
+      <button class="btn" id="btn-undo">撤销</button>
+      <button class="btn" id="btn-solve">一键复原</button>
+      <button class="btn" id="btn-view">重置视角</button>
+    </div>
+  </div>
+
+  <div class="hint">拖拽方块转动一层 · 拖拽背景旋转视角 · 滚轮 / 双指缩放</div>
+  <div id="toast"></div>
+
+  <div id="win" class="hidden">
+    <div class="win-card">
+      <div class="emoji">🎉</div>
+      <h2>恭喜，复原成功！</h2>
+      <p id="win-info"></p>
+      <button class="btn primary" id="btn-again" style="width:100%">再来一局</button>
+    </div>
+  </div>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ============================================================
+   1. 基础配置
+   ============================================================ */
+const COLORS = { px: 0xe2453c, nx: 0xff8a21, py: 0xf7f7f7, ny: 0xffdd21, pz: 0x23b26b, nz: 0x2a6ff2 };
+const FACES = [
+  { key: 'px', n: new THREE.Vector3(1, 0, 0),  rot: [0, Math.PI / 2, 0] },
+  { key: 'nx', n: new THREE.Vector3(-1, 0, 0), rot: [0, -Math.PI / 2, 0] },
+  { key: 'py', n: new THREE.Vector3(0, 1, 0),  rot: [-Math.PI / 2, 0, 0] },
+  { key: 'ny', n: new THREE.Vector3(0, -1, 0), rot: [Math.PI / 2, 0, 0] },
+  { key: 'pz', n: new THREE.Vector3(0, 0, 1),  rot: [0, 0, 0] },
+  { key: 'nz', n: new THREE.Vector3(0, 0, -1), rot: [0, Math.PI, 0] },
+];
+const AXES = { x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), z: new THREE.Vector3(0, 0, 1) };
+const clamp = THREE.MathUtils.clamp;
+
+/* ============================================================
+   2. 场景 / 相机 / 渲染器
+   ============================================================ */
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 100);
+
+const cam = { theta: 0.72, phi: 1.06, radius: 10.5 };   // 球坐标（围绕魔方）
+const camHome = { ...cam };
+function updateCamera() {
+  const { theta, phi, radius } = cam;
+  camera.position.set(
+    radius * Math.sin(phi) * Math.sin(theta),
+    radius * Math.cos(phi),
+    radius * Math.sin(phi) * Math.cos(theta)
+  );
+  camera.lookAt(0, 0, 0);
+}
+
+/* 灯光 */
+scene.add(new THREE.AmbientLight(0xffffff, 0.72));
+const key = new THREE.DirectionalLight(0xffffff, 1.15); key.position.set(6, 10, 8); scene.add(key);
+const fill = new THREE.DirectionalLight(0xbcd2ff, 0.5); fill.position.set(-8, 3, 6); scene.add(fill);
+const rim = new THREE.DirectionalLight(0xffffff, 0.35); rim.position.set(-4, -7, -8); scene.add(rim);
+
+/* ============================================================
+   3. 构建魔方（27 个小方块）
+   ============================================================ */
+const cubeGroup = new THREE.Group();
+scene.add(cubeGroup);
+
+/* 圆角贴纸纹理 */
+function roundRectPath(g, x, y, w, h, r) {
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+}
+function shade(hex, mul) {
+  const c = new THREE.Color(hex);
+  c.multiplyScalar(mul);
+  return '#' + c.getHexString();
+}
+const stickerTextures = {};
+for (const f of FACES) {
+  const s = 128;
+  const cv = document.createElement('canvas'); cv.width = cv.height = s;
+  const g = cv.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, s, s);
+  grad.addColorStop(0, shade(COLORS[f.key], 1.12));
+  grad.addColorStop(1, shade(COLORS[f.key], 0.9));
+  roundRectPath(g, 11, 11, s - 22, s - 22, 24);
+  g.fillStyle = grad; g.fill();
+  g.lineWidth = 4; g.strokeStyle = 'rgba(255,255,255,0.28)'; g.stroke();
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  stickerTextures[f.key] = tex;
+}
+
+const cubieGeo = new THREE.BoxGeometry(0.96, 0.96, 0.96);
+const stickerGeo = new THREE.PlaneGeometry(0.8, 0.8);
+const innerMat = new THREE.MeshStandardMaterial({ color: 0x12141b, roughness: 0.7, metalness: 0.15 });
+const stickerMats = {};
+for (const f of FACES) {
+  stickerMats[f.key] = new THREE.MeshStandardMaterial({
+    map: stickerTextures[f.key], transparent: true, roughness: 0.35, metalness: 0.05,
+  });
+}
+
+const cubies = [];
+function buildCube() {
+  for (let x = -1; x <= 1; x++) {
+    for (let y = -1; y <= 1; y++) {
+      for (let z = -1; z <= 1; z++) {
+        if (x === 0 && y === 0 && z === 0) continue;   // 中心核不渲染
+        const cubie = new THREE.Group();
+        cubie.add(new THREE.Mesh(cubieGeo, innerMat));
+        for (const f of FACES) {
+          const isOuter = f.n.x !== 0 ? f.n.x === x : (f.n.y !== 0 ? f.n.y === y : f.n.z === z);
+          if (!isOuter) continue;
+          const st = new THREE.Mesh(stickerGeo, stickerMats[f.key]);
+          st.position.copy(f.n).multiplyScalar(0.485);
+          st.rotation.set(...f.rot);
+          cubie.add(st);
+        }
+        cubie.position.set(x, y, z);
+        cubie.userData.home = cubie.position.clone();
+        cubeGroup.add(cubie);
+        cubies.push(cubie);
+      }
+    }
+  }
+}
+buildCube();
+
+/* ============================================================
+   4. 转动引擎
+   ============================================================ */
+const pivot = new THREE.Group();     // 转动临时父节点
+cubeGroup.add(pivot);
+let animating = false;
+
+function layerCubies(axis, layer) {
+  return cubies.filter(c => Math.round(c.position[axis]) === layer);
+}
+/* 把浮点误差吸附回整数格点与 90° 朝向 */
+function snap(c) {
+  c.position.set(Math.round(c.position.x), Math.round(c.position.y), Math.round(c.position.z));
+  const q = c.quaternion, k = Math.SQRT1_2;
+  c.quaternion.set(
+    Math.round(q.x / k) * k, Math.round(q.y / k) * k,
+    Math.round(q.z / k) * k, Math.round(q.w / k) * k
+  ).normalize();
+}
+const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
+
+/* 带动画的一层转动 */
+function animateMove(axis, layer, dir, duration = 210) {
+  return new Promise(resolve => {
+    if (animating) { resolve(false); return; }
+    animating = true;
+    const group = layerCubies(axis, layer);
+    group.forEach(c => pivot.attach(c));
+    const target = dir * Math.PI / 2;
+    const t0 = performance.now();
+    (function frame(now) {
+      const p = Math.min(1, (now - t0) / duration);
+      pivot.rotation[axis] = target * easeOutCubic(p);
+      if (p < 1) { requestAnimationFrame(frame); return; }
+      pivot.rotation[axis] = target;
+      pivot.updateMatrixWorld(true);
+      group.forEach(c => { cubeGroup.attach(c); snap(c); });
+      animating = false;
+      resolve(true);
+    })(t0);
+  });
+}
+/* 瞬时转动（用于打乱 / 复原） */
+function instantMove(axis, layer, dir) {
+  const group = layerCubies(axis, layer);
+  group.forEach(c => pivot.attach(c));
+  pivot.rotation[axis] = dir * Math.PI / 2;
+  pivot.updateMatrixWorld(true);
+  group.forEach(c => { cubeGroup.attach(c); snap(c); });
+  pivot.rotation[axis] = 0;
+}
+
+/* ============================================================
+   5. 交互：拖拽转层 / 拖拽转视角 / 缩放
+   ============================================================ */
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+let drag = null;
+const pointers = new Map();
+
+function pick(e) {
+  const r = canvas.getBoundingClientRect();
+  ndc.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+  ndc.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+  raycaster.setFromCamera(ndc, camera);
+  const hits = raycaster.intersectObjects(cubeGroup.children, true);
+  if (!hits.length) return null;
+  const h = hits[0];
+  let obj = h.object;
+  while (obj.parent && obj.parent !== cubeGroup) obj = obj.parent;
+  return {
+    cubie: obj,
+    point: h.point.clone(),
+    normal: h.face.normal.clone().transformDirection(h.object.matrixWorld).normalize(),
+  };
+}
+/* 根据拖拽方向判断：绕哪根轴、哪一层、什么方向 */
+function pickAxis(hit, dx, dy) {
+  const { point, normal } = hit;
+  const r = canvas.getBoundingClientRect();
+  const dragVec = new THREE.Vector2(dx, dy);
+  if (dragVec.lengthSq() < 1e-6) return null;
+  dragVec.normalize();
+  const toScreen = v => {
+    const p = v.clone().project(camera);
+    return new THREE.Vector2((p.x + 1) / 2 * r.width, (1 - p.y) / 2 * r.height);
+  };
+  const base = toScreen(point);
+  let best = null;
+  for (const key of ['x', 'y', 'z']) {
+    if (Math.abs(normal[key]) > 0.5) continue;             // 与命中面平行的轴不候选
+    const ax = AXES[key];
+    const perp = point.clone().addScaledVector(ax, -point.dot(ax));
+    const tangent = new THREE.Vector3().crossVectors(ax, perp);  // 绕轴正方向旋转时该点的运动方向
+    if (tangent.lengthSq() < 1e-8) continue;
+    tangent.normalize();
+    const sp = toScreen(point.clone().add(tangent)).sub(base);
+    if (sp.lengthSq() < 1e-6) continue;
+    sp.normalize();
+    const dot = sp.dot(dragVec);
+    if (!best || Math.abs(dot) > Math.abs(best.dot)) best = { axis: key, dot };
+  }
+  if (!best || Math.abs(best.dot) < 0.25) return null;     // 方向太斜则不触发
+  return { axis: best.axis, dir: best.dot > 0 ? 1 : -1 };
+}
+
+const pinchDist = () => {
+  const p = [...pointers.values()];
+  return p.length === 2 ? Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y) : 0;
+};
+
+canvas.addEventListener('pointerdown', e => {
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 2) { drag = { mode: 'pinch', dist: pinchDist() }; return; }
+  if (pointers.size > 2) return;
+  const hit = pick(e);
+  if (hit && !animating && interactive) {
+    drag = { mode: 'cube', hit, sx: e.clientX, sy: e.clientY, done: false };
+  } else {
+    drag = { mode: 'orbit', x: e.clientX, y: e.clientY };
+  }
+});
+
+window.addEventListener('pointermove', e => {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (!drag) return;
+  if (drag.mode === 'pinch') {
+    const d = pinchDist();
+    if (d > 0 && drag.dist > 0) { cam.radius = clamp(cam.radius * drag.dist / d, 6.5, 20); drag.dist = d; }
+    return;
+  }
+  if (drag.mode === 'orbit') {
+    cam.theta += (e.clientX - drag.x) * 0.006;
+    cam.phi = clamp(cam.phi - (e.clientY - drag.y) * 0.006, 0.22, Math.PI - 0.22);
+    drag.x = e.clientX; drag.y = e.clientY;
+  } else if (drag.mode === 'cube' && !drag.done) {
+    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+    if (Math.hypot(dx, dy) < 14) return;
+    drag.done = true;
+    const info = pickAxis(drag.hit, dx, dy);
+    if (info) userMove(info.axis, Math.round(drag.hit.cubie.position[info.axis]), info.dir);
+  }
+});
+
+function endPointer(e) {
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2 && drag && drag.mode === 'pinch') drag = null;
+  if (pointers.size === 0) drag = null;
+}
+window.addEventListener('pointerup', endPointer);
+window.addEventListener('pointercancel', endPointer);
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  cam.radius = clamp(cam.radius * (1 + Math.sign(e.deltaY) * 0.12), 6.5, 20);
+}, { passive: false });
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+/* ============================================================
+   6. 游戏逻辑（计时 / 步数 / 打乱 / 撤销 / 复原 / 判定）
+   ============================================================ */
+const $ = id => document.getElementById(id);
+const elTime = $('time'), elCount = $('move-count'), elLast = $('last');
+const btnScramble = $('btn-scramble'), btnUndo = $('btn-undo'), btnSolve = $('btn-solve'), btnView = $('btn-view');
+const winBox = $('win'), winInfo = $('win-info');
+
+let history = [];        // 操作历史 {axis, layer, dir}
+let moveCount = 0;
+let startTime = null, endTime = null;
+let interactive = false; // 入场动画结束后才允许操作
+
+const fmt = ms => {
+  const s = ms / 1000;
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}.${Math.floor((ms % 1000) / 100)}`;
+};
+function updateHUD() {
+  elCount.textContent = moveCount;
+}
+function toast(msg, ms = 1800) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove('show'), ms);
+}
+function moveLabel(axis, layer, dir) {
+  const s = dir > 0 ? '' : "'";
+  if (axis === 'x') {
+    if (layer === 2) return 'R' + s;
+    if (layer === 0) return dir > 0 ? "L'" : 'L';
+    return dir > 0 ? "M'" : 'M';
+  }
+  if (axis === 'y') {
+    if (layer === 2) return 'U' + s;
+    if (layer === 0) return dir > 0 ? "D'" : 'D';
+    return dir > 0 ? "E'" : 'E';
+  }
+  if (layer === 2) return 'F' + s;
+  if (layer === 0) return dir > 0 ? "B'" : 'B';
+  return dir > 0 ? 'S' : "S'";
+}
+function isSolved() {
+  for (const c of cubies) {
+    if (c.position.distanceTo(c.userData.home) > 0.05) return false;
+    if (Math.abs(c.quaternion.w) < 0.99) return false;   // 位置对但朝向不对也不算还原
+  }
+  return true;
+}
+
+/* 玩家手动转一层 */
+async function userMove(axis, layer, dir) {
+  if (animating || !interactive) return;
+  const ok = await animateMove(axis, layer, dir, 200);
+  if (!ok) return;
+  history.push({ axis, layer, dir });
+  moveCount++;
+  elLast.textContent = moveLabel(axis, layer, dir);
+  if (!startTime) startTime = performance.now();
+  updateHUD();
+  if (isSolved()) win();
+}
+
+/* 打乱 */
+function scramble() {
+  if (animating || !interactive) return;
+  const axes = ['x', 'y', 'z'], layers = [-1, 0, 1];
+  let prev = null;
+  const seq = [];
+  for (let i = 0; i < 25; i++) {
+    let m;
+    do {
+      m = { axis: axes[(Math.random() * 3) | 0], layer: layers[(Math.random() * 3) | 0], dir: Math.random() < 0.5 ? 1 : -1 };
+    } while (prev && prev.axis === m.axis && prev.layer === m.layer);  // 避免连续转同一层
+    prev = m;
+    seq.push(m);
+  }
+  seq.forEach(instantMove);
+  history = seq.slice();
+  moveCount = 0; startTime = null; endTime = null;
+  elLast.textContent = '—';
+  winBox.classList.add('hidden');
+  updateHUD();
+  toast('已打乱，开始挑战！');
+}
+
+/* 撤销一步 */
+async function undo() {
+  if (animating || !interactive || !history.length) return;
+  const m = history.pop();
+  await animateMove(m.axis, m.layer, -m.dir, 170);
+  moveCount = Math.max(0, moveCount - 1);
+  elLast.textContent = history.length ? moveLabel(...Object.values(history[history.length - 1])) : '—';
+  updateHUD();
+}
+
+/* 一键复原（按历史逆序快速还原） */
+async function solveAll() {
+  if (animating || !interactive) return;
+  if (!history.length) { toast('魔方已是复原状态'); return; }
+  interactive = false;
+  const seq = history.slice().reverse();
+  for (const m of seq) await animateMove(m.axis, m.layer, -m.dir, 110);
+  history = []; moveCount = 0; startTime = null; endTime = null;
+  elLast.textContent = '—';
+  updateHUD();
+  interactive = true;
+  toast('已复原，再来一局吧！');
+}
+
+function win() {
+  endTime = performance.now();
+  const used = fmt(endTime - startTime);
+  winInfo.textContent = `用时 ${used} · 共 ${moveCount} 步`;
+  winBox.classList.remove('hidden');
+  toast('🎉 恭喜，复原成功！');
+}
+
+btnScramble.addEventListener('click', scramble);
+btnUndo.addEventListener('click', undo);
+btnSolve.addEventListener('click', solveAll);
+btnView.addEventListener('click', () => {
+  Object.assign(cam, camHome);
+  toast('视角已重置', 1200);
+});
+$('btn-again').addEventListener('click', () => {
+  winBox.classList.add('hidden');
+  scramble();
+});
+
+/* ============================================================
+   7. 入场动画 + 主循环
+   ============================================================ */
+const easeOutBack = t => { const c = 1.70158; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); };
+const introStart = performance.now();
+(function intro(now) {
+  const p = Math.min(1, (now - introStart) / 750);
+  const e = easeOutBack(p);
+  cubeGroup.scale.setScalar(0.15 + 0.85 * e);
+  cubeGroup.rotation.y = -0.6 * (1 - easeOutCubic(p));
+  if (p < 1) requestAnimationFrame(intro);
+  else { cubeGroup.scale.setScalar(1); cubeGroup.rotation.y = 0; interactive = true; }
+})(introStart);
+
+function tick() {
+  requestAnimationFrame(tick);
+  updateCamera();
+  if (startTime && !endTime) elTime.textContent = fmt(performance.now() - startTime);
+  const busy = animating || !interactive;
+  btnScramble.disabled = busy;
+  btnUndo.disabled = busy || !history.length;
+  btnSolve.disabled = busy || !history.length;
+  renderer.render(scene, camera);
+}
+tick();
+updateHUD();
+</script>
+</body>
+</html>
