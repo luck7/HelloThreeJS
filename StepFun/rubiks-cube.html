@@ -20,9 +20,9 @@
 
   .panel {
     position: fixed; top: 18px; left: 18px; z-index: 10;
-    width: min(92vw, 330px);
-    padding: 14px 16px 16px;
-    background: rgba(20, 25, 38, 0.55);
+    width: min(92vw, 336px);
+    padding: 14px 16px 14px;
+    background: rgba(20, 25, 38, 0.58);
     border: 1px solid rgba(255, 255, 255, 0.09);
     border-radius: 16px;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
@@ -41,10 +41,10 @@
   }
   .stat .label { display: block; font-size: 11px; color: #93a2bd; margin-bottom: 2px; }
   .stat .value {
-    display: block; font-size: 19px; font-weight: 700;
+    display: block; font-size: 18px; font-weight: 700;
     font-variant-numeric: tabular-nums; letter-spacing: 0.5px;
   }
-  #last { color: #7ee0a3; }
+  #last { color: #7ee0a3; font-size: 16px !important; }
 
   .actions { display: flex; flex-wrap: wrap; gap: 8px; }
   .btn {
@@ -64,6 +64,33 @@
   }
   .btn.primary:hover:not(:disabled) { background: linear-gradient(135deg, #6289ff, #9a70ff); }
 
+  .steps-head {
+    display: flex; justify-content: space-between; align-items: center;
+    margin: 12px 0 6px; font-size: 11px; color: #93a2bd; letter-spacing: .5px;
+  }
+  .steps-head b { color: #cfe0ff; font-weight: 600; }
+  .steps {
+    display: flex; flex-wrap: wrap; gap: 5px; align-content: flex-start;
+    min-height: 40px; max-height: 104px; overflow-y: auto;
+    padding: 9px 10px; border-radius: 12px;
+    background: rgba(0, 0, 0, 0.24); border: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 12px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.18) transparent;
+  }
+  .steps::-webkit-scrollbar { width: 5px; }
+  .steps::-webkit-scrollbar-thumb { background: rgba(255,255,255,.16); border-radius: 3px; }
+  .steps .empty { color: #6d7c96; line-height: 22px; }
+  .steps i {
+    font-style: normal; padding: 2px 7px; border-radius: 6px;
+    background: rgba(255, 255, 255, 0.07); color: #b9c6dc;
+    font-variant-numeric: tabular-nums; font-weight: 600;
+    transition: background .15s ease, color .15s ease;
+  }
+  .steps i.done { color: #5d6b85; background: rgba(255, 255, 255, 0.03); }
+  .steps i.active {
+    color: #0b1020; background: linear-gradient(135deg, #7ee0a3, #4fd8ff);
+    box-shadow: 0 0 12px rgba(126, 224, 163, 0.45);
+  }
+
   .hint {
     position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
     padding: 7px 16px; border-radius: 999px; white-space: nowrap;
@@ -74,7 +101,7 @@
   #toast {
     position: fixed; bottom: 64px; left: 50%; transform: translate(-50%, 10px);
     padding: 9px 18px; border-radius: 12px; font-size: 13px; z-index: 20;
-    background: rgba(18, 22, 33, 0.85); border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(18, 22, 33, 0.88); border: 1px solid rgba(255, 255, 255, 0.12);
     opacity: 0; pointer-events: none; transition: opacity .25s ease, transform .25s ease;
   }
   #toast.show { opacity: 1; transform: translate(-50%, 0); }
@@ -88,7 +115,7 @@
   #win.hidden { display: none; }
   .win-card {
     width: min(88vw, 320px); padding: 28px 24px; text-align: center;
-    background: rgba(24, 29, 44, 0.9); border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(24, 29, 44, 0.92); border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 20px; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
     animation: pop .35s cubic-bezier(.2, 1.4, .4, 1) both;
   }
@@ -99,7 +126,8 @@
 
   @media (max-width: 480px) {
     .panel { top: 12px; left: 12px; right: 12px; width: auto; padding: 12px 14px; }
-    .stat .value { font-size: 17px; }
+    .stat .value { font-size: 16px; }
+    .steps { max-height: 72px; }
     .hint { font-size: 11px; }
   }
 </style>
@@ -127,6 +155,10 @@
       <button class="btn" id="btn-solve">一键复原</button>
       <button class="btn" id="btn-view">重置视角</button>
     </div>
+    <div class="steps-head">
+      <span>反转步骤</span><b id="steps-progress">—</b>
+    </div>
+    <div class="steps" id="steps"><span class="empty">点击「一键复原」后，这里会按逆序逐步显示还原步骤</span></div>
   </div>
 
   <div class="hint">拖拽方块转动一层 · 拖拽背景旋转视角 · 滚轮 / 双指缩放</div>
@@ -147,7 +179,7 @@ import * as THREE from 'three';
 /* ============================================================
    1. 基础配置
    ============================================================ */
-const COLORS = { px: 0xe2453c, nx: 0xff8a21, py: 0xf7f7f7, ny: 0xffdd21, pz: 0x23b26b, nz: 0x2a6ff2 };
+const COLORS = { px: 0xC41E3A, nx: 0xFF5800, py: 0xF2F2F2, ny: 0xFFD500, pz: 0x009E60, nz: 0x0051BA };
 const FACES = [
   { key: 'px', n: new THREE.Vector3(1, 0, 0),  rot: [0, Math.PI / 2, 0] },
   { key: 'nx', n: new THREE.Vector3(-1, 0, 0), rot: [0, -Math.PI / 2, 0] },
@@ -159,18 +191,26 @@ const FACES = [
 const AXES = { x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), z: new THREE.Vector3(0, 0, 1) };
 const clamp = THREE.MathUtils.clamp;
 
+/* 黑色方块 0.90，贴纸离表面 0.02 净空，避免 z-fighting */
+const CUBIE_SIZE = 0.90;
+const STICKER_OFFSET = 0.47;
+const STICKER_SIZE = 0.78;
+
 /* ============================================================
    2. 场景 / 相机 / 渲染器
    ============================================================ */
 const canvas = document.getElementById('scene');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+const renderer = new THREE.WebGLRenderer({
+  canvas, antialias: true, alpha: true, powerPreference: 'high-performance'
+});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 100);
 
-const cam = { theta: 0.72, phi: 1.06, radius: 10.5 };   // 球坐标（围绕魔方）
+const cam = { theta: 0.72, phi: 1.06, radius: 10.5 };
 const camHome = { ...cam };
 function updateCamera() {
   const { theta, phi, radius } = cam;
@@ -182,91 +222,87 @@ function updateCamera() {
   camera.lookAt(0, 0, 0);
 }
 
-/* 灯光 */
-scene.add(new THREE.AmbientLight(0xffffff, 0.72));
-const key = new THREE.DirectionalLight(0xffffff, 1.15); key.position.set(6, 10, 8); scene.add(key);
+scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+scene.add(new THREE.HemisphereLight(0xdfe9ff, 0x1a1f2e, 0.35));
+const key = new THREE.DirectionalLight(0xffffff, 1.25); key.position.set(6, 10, 8); scene.add(key);
 const fill = new THREE.DirectionalLight(0xbcd2ff, 0.5); fill.position.set(-8, 3, 6); scene.add(fill);
-const rim = new THREE.DirectionalLight(0xffffff, 0.35); rim.position.set(-4, -7, -8); scene.add(rim);
+const rim = new THREE.DirectionalLight(0xffffff, 0.4); rim.position.set(-4, -7, -8); scene.add(rim);
 
 /* ============================================================
-   3. 构建魔方（27 个小方块）
+   3. 构建魔方（26 个小方块）
+   ★ 修复：roundRectShape 的路径必须按「顶→右→底→左」顺序闭合绕行，
+     旧版路径终点乱跳导致自相交多边形，贴纸形状怪异。
    ============================================================ */
 const cubeGroup = new THREE.Group();
 scene.add(cubeGroup);
 
-/* 圆角贴纸纹理 */
-function roundRectPath(g, x, y, w, h, r) {
-  g.moveTo(x + r, y);
-  g.arcTo(x + w, y, x + w, y + h, r);
-  g.arcTo(x + w, y + h, x, y + h, r);
-  g.arcTo(x, y + h, x, y, r);
-  g.arcTo(x, y, x + w, y, r);
-  g.closePath();
-}
-function shade(hex, mul) {
-  const c = new THREE.Color(hex);
-  c.multiplyScalar(mul);
-  return '#' + c.getHexString();
-}
-const stickerTextures = {};
-for (const f of FACES) {
-  const s = 128;
-  const cv = document.createElement('canvas'); cv.width = cv.height = s;
-  const g = cv.getContext('2d');
-  const grad = g.createLinearGradient(0, 0, s, s);
-  grad.addColorStop(0, shade(COLORS[f.key], 1.12));
-  grad.addColorStop(1, shade(COLORS[f.key], 0.9));
-  roundRectPath(g, 11, 11, s - 22, s - 22, 24);
-  g.fillStyle = grad; g.fill();
-  g.lineWidth = 4; g.strokeStyle = 'rgba(255,255,255,0.28)'; g.stroke();
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
-  stickerTextures[f.key] = tex;
+function roundRectShape(w, h, r) {
+  const s = new THREE.Shape();
+  const x = -w / 2, y = -h / 2;
+  s.moveTo(x + r, y);                                  // 顶边起点
+  s.lineTo(x + w - r, y);                              // 顶边
+  s.quadraticCurveTo(x + w, y, x + w, y + r);          // 右上圆角
+  s.lineTo(x + w, y + h - r);                          // 右边
+  s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);  // 右下圆角
+  s.lineTo(x + r, y + h);                              // 底边
+  s.quadraticCurveTo(x, y + h, x, y + h - r);          // 左下圆角
+  s.lineTo(x, y + r);                                  // 左边
+  s.quadraticCurveTo(x, y, x + r, y);                  // 左上圆角
+  return s;
 }
 
-const cubieGeo = new THREE.BoxGeometry(0.96, 0.96, 0.96);
-const stickerGeo = new THREE.PlaneGeometry(0.8, 0.8);
-const innerMat = new THREE.MeshStandardMaterial({ color: 0x12141b, roughness: 0.7, metalness: 0.15 });
+const cubieGeo = new THREE.BoxGeometry(CUBIE_SIZE, CUBIE_SIZE, CUBIE_SIZE);
+const stickerGeo = new THREE.ShapeGeometry(roundRectShape(STICKER_SIZE, STICKER_SIZE, 0.14), 12);
+const innerMat = new THREE.MeshStandardMaterial({
+  color: 0x0d0f15, roughness: 0.62, metalness: 0.25,
+  polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
+});
 const stickerMats = {};
 for (const f of FACES) {
   stickerMats[f.key] = new THREE.MeshStandardMaterial({
-    map: stickerTextures[f.key], transparent: true, roughness: 0.35, metalness: 0.05,
+    color: COLORS[f.key], roughness: 0.34, metalness: 0.06, side: THREE.FrontSide,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
   });
 }
 
 const cubies = [];
-function buildCube() {
-  for (let x = -1; x <= 1; x++) {
-    for (let y = -1; y <= 1; y++) {
-      for (let z = -1; z <= 1; z++) {
-        if (x === 0 && y === 0 && z === 0) continue;   // 中心核不渲染
-        const cubie = new THREE.Group();
-        cubie.add(new THREE.Mesh(cubieGeo, innerMat));
-        for (const f of FACES) {
-          const isOuter = f.n.x !== 0 ? f.n.x === x : (f.n.y !== 0 ? f.n.y === y : f.n.z === z);
-          if (!isOuter) continue;
-          const st = new THREE.Mesh(stickerGeo, stickerMats[f.key]);
-          st.position.copy(f.n).multiplyScalar(0.485);
-          st.rotation.set(...f.rot);
-          cubie.add(st);
-        }
-        cubie.position.set(x, y, z);
-        cubie.userData.home = cubie.position.clone();
-        cubeGroup.add(cubie);
-        cubies.push(cubie);
+for (let x = -1; x <= 1; x++) {
+  for (let y = -1; y <= 1; y++) {
+    for (let z = -1; z <= 1; z++) {
+      if (x === 0 && y === 0 && z === 0) continue;
+      const cubie = new THREE.Group();
+      cubie.add(new THREE.Mesh(cubieGeo, innerMat));
+      for (const f of FACES) {
+        const isOuter = f.n.x !== 0 ? f.n.x === x : (f.n.y !== 0 ? f.n.y === y : f.n.z === z);
+        if (!isOuter) continue;
+        const st = new THREE.Mesh(stickerGeo, stickerMats[f.key]);
+        st.position.copy(f.n).multiplyScalar(STICKER_OFFSET);
+        st.rotation.set(...f.rot);
+        cubie.add(st);
       }
+      cubie.position.set(x, y, z);
+      cubie.userData.home = cubie.position.clone();
+      cubies.push(cubie);
+      cubeGroup.add(cubie);
     }
   }
 }
-buildCube();
 
 /* ============================================================
    4. 转动引擎
    ============================================================ */
-const pivot = new THREE.Group();     // 转动临时父节点
+const pivot = new THREE.Group();
 cubeGroup.add(pivot);
 let animating = false;
+
+/* 每次转动前必须把 pivot.rotation 三轴全部归零。
+   否则上一次转动遗留的 Euler 分量会和本次转动按 XYZ 顺序叠加，
+   得到完全错误的旋转。 */
+function resetPivot() {
+  pivot.rotation.set(0, 0, 0);
+  pivot.updateMatrixWorld(true);
+}
+resetPivot();
 
 function layerCubies(axis, layer) {
   return cubies.filter(c => Math.round(c.position[axis]) === layer);
@@ -287,6 +323,7 @@ function animateMove(axis, layer, dir, duration = 210) {
   return new Promise(resolve => {
     if (animating) { resolve(false); return; }
     animating = true;
+    resetPivot();
     const group = layerCubies(axis, layer);
     group.forEach(c => pivot.attach(c));
     const target = dir * Math.PI / 2;
@@ -298,19 +335,30 @@ function animateMove(axis, layer, dir, duration = 210) {
       pivot.rotation[axis] = target;
       pivot.updateMatrixWorld(true);
       group.forEach(c => { cubeGroup.attach(c); snap(c); });
+      resetPivot();
       animating = false;
       resolve(true);
     })(t0);
   });
 }
-/* 瞬时转动（用于打乱 / 复原） */
+/* 瞬时转动（用于打乱） */
 function instantMove(axis, layer, dir) {
+  resetPivot();
   const group = layerCubies(axis, layer);
   group.forEach(c => pivot.attach(c));
   pivot.rotation[axis] = dir * Math.PI / 2;
   pivot.updateMatrixWorld(true);
   group.forEach(c => { cubeGroup.attach(c); snap(c); });
-  pivot.rotation[axis] = 0;
+  resetPivot();
+}
+/* 兜底：直接把所有小方块还原到初始位姿 */
+function hardReset() {
+  for (const c of cubies) {
+    c.position.copy(c.userData.home);
+    c.quaternion.set(0, 0, 0, 1);
+    c.updateMatrix();
+  }
+  resetPivot();
 }
 
 /* ============================================================
@@ -337,7 +385,6 @@ function pick(e) {
     normal: h.face.normal.clone().transformDirection(h.object.matrixWorld).normalize(),
   };
 }
-/* 根据拖拽方向判断：绕哪根轴、哪一层、什么方向 */
 function pickAxis(hit, dx, dy) {
   const { point, normal } = hit;
   const r = canvas.getBoundingClientRect();
@@ -350,20 +397,20 @@ function pickAxis(hit, dx, dy) {
   };
   const base = toScreen(point);
   let best = null;
-  for (const key of ['x', 'y', 'z']) {
-    if (Math.abs(normal[key]) > 0.5) continue;             // 与命中面平行的轴不候选
-    const ax = AXES[key];
+  for (const k of ['x', 'y', 'z']) {
+    if (Math.abs(normal[k]) > 0.5) continue;
+    const ax = AXES[k];
     const perp = point.clone().addScaledVector(ax, -point.dot(ax));
-    const tangent = new THREE.Vector3().crossVectors(ax, perp);  // 绕轴正方向旋转时该点的运动方向
+    const tangent = new THREE.Vector3().crossVectors(ax, perp);
     if (tangent.lengthSq() < 1e-8) continue;
     tangent.normalize();
     const sp = toScreen(point.clone().add(tangent)).sub(base);
     if (sp.lengthSq() < 1e-6) continue;
     sp.normalize();
     const dot = sp.dot(dragVec);
-    if (!best || Math.abs(dot) > Math.abs(best.dot)) best = { axis: key, dot };
+    if (!best || Math.abs(dot) > Math.abs(best.dot)) best = { axis: k, dot };
   }
-  if (!best || Math.abs(best.dot) < 0.25) return null;     // 方向太斜则不触发
+  if (!best || Math.abs(best.dot) < 0.25) return null;
   return { axis: best.axis, dir: best.dot > 0 ? 1 : -1 };
 }
 
@@ -426,25 +473,24 @@ window.addEventListener('resize', () => {
 });
 
 /* ============================================================
-   6. 游戏逻辑（计时 / 步数 / 打乱 / 撤销 / 复原 / 判定）
+   6. 游戏逻辑
    ============================================================ */
 const $ = id => document.getElementById(id);
 const elTime = $('time'), elCount = $('move-count'), elLast = $('last');
+const elSteps = $('steps'), elProgress = $('steps-progress');
 const btnScramble = $('btn-scramble'), btnUndo = $('btn-undo'), btnSolve = $('btn-solve'), btnView = $('btn-view');
 const winBox = $('win'), winInfo = $('win-info');
 
-let history = [];        // 操作历史 {axis, layer, dir}
+let history = [];
 let moveCount = 0;
 let startTime = null, endTime = null;
-let interactive = false; // 入场动画结束后才允许操作
+let interactive = false;
 
 const fmt = ms => {
   const s = ms / 1000;
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}.${Math.floor((ms % 1000) / 100)}`;
 };
-function updateHUD() {
-  elCount.textContent = moveCount;
-}
+function updateHUD() { elCount.textContent = moveCount; }
 function toast(msg, ms = 1800) {
   const t = $('toast');
   t.textContent = msg;
@@ -471,9 +517,22 @@ function moveLabel(axis, layer, dir) {
 function isSolved() {
   for (const c of cubies) {
     if (c.position.distanceTo(c.userData.home) > 0.05) return false;
-    if (Math.abs(c.quaternion.w) < 0.99) return false;   // 位置对但朝向不对也不算还原
+    if (Math.abs(c.quaternion.w) < 0.99) return false;
   }
   return true;
+}
+function renderSteps(seq, activeIndex = -1) {
+  if (!seq.length) {
+    elSteps.innerHTML = '<span class="empty">点击「一键复原」后，这里会按逆序逐步显示还原步骤</span>';
+    elProgress.textContent = '—';
+    return;
+  }
+  elSteps.innerHTML = seq
+    .map((m, i) => `<i class="${i < activeIndex ? 'done' : (i === activeIndex ? 'active' : '')}">${moveLabel(m.axis, m.layer, -m.dir)}</i>`)
+    .join('');
+  elProgress.textContent = activeIndex >= 0 ? `${activeIndex + 1} / ${seq.length}` : `共 ${seq.length} 步`;
+  const act = elSteps.querySelector('i.active');
+  if (act) act.scrollIntoView({ block: 'nearest' });
 }
 
 /* 玩家手动转一层 */
@@ -489,7 +548,11 @@ async function userMove(axis, layer, dir) {
   if (isSolved()) win();
 }
 
-/* 打乱 */
+/* 打乱
+   ★ 修复：旧版写成 seq.forEach(instantMove)，forEach 会把 (元素, 索引, 数组)
+     三个参数传进去，导致 axis 收到整个对象、dir 收到数组，
+     layerCubies 因 Math.round(undefined)=NaN 而返回空数组，
+     25 步全部空转，魔方纹丝不动。 */
 function scramble() {
   if (animating || !interactive) return;
   const axes = ['x', 'y', 'z'], layers = [-1, 0, 1];
@@ -499,16 +562,19 @@ function scramble() {
     let m;
     do {
       m = { axis: axes[(Math.random() * 3) | 0], layer: layers[(Math.random() * 3) | 0], dir: Math.random() < 0.5 ? 1 : -1 };
-    } while (prev && prev.axis === m.axis && prev.layer === m.layer);  // 避免连续转同一层
+    } while (prev && prev.axis === m.axis && prev.layer === m.layer);
     prev = m;
     seq.push(m);
   }
-  seq.forEach(instantMove);
+  for (const m of seq) instantMove(m.axis, m.layer, m.dir);   // ← 显式解构，杜绝多参泄漏
   history = seq.slice();
   moveCount = 0; startTime = null; endTime = null;
   elLast.textContent = '—';
+  elTime.textContent = '00:00.0';
+  renderSteps(seq.slice().reverse(), -1);
   winBox.classList.add('hidden');
   updateHUD();
+  if (isSolved()) { console.warn('[魔方] 打乱后仍是复原状态，已重试'); scramble(); return; }
   toast('已打乱，开始挑战！');
 }
 
@@ -518,22 +584,40 @@ async function undo() {
   const m = history.pop();
   await animateMove(m.axis, m.layer, -m.dir, 170);
   moveCount = Math.max(0, moveCount - 1);
-  elLast.textContent = history.length ? moveLabel(...Object.values(history[history.length - 1])) : '—';
+  const last = history[history.length - 1];
+  elLast.textContent = last ? moveLabel(last.axis, last.layer, last.dir) : '—';
+  renderSteps(history.slice().reverse(), -1);
   updateHUD();
 }
 
-/* 一键复原（按历史逆序快速还原） */
+/* 一键复原：按历史逆序逐步回放，并同步高亮反转步骤 */
 async function solveAll() {
   if (animating || !interactive) return;
   if (!history.length) { toast('魔方已是复原状态'); return; }
+
   interactive = false;
-  const seq = history.slice().reverse();
-  for (const m of seq) await animateMove(m.axis, m.layer, -m.dir, 110);
-  history = []; moveCount = 0; startTime = null; endTime = null;
-  elLast.textContent = '—';
-  updateHUD();
-  interactive = true;
-  toast('已复原，再来一局吧！');
+  const seq = history.slice().reverse();          // 逆序 = 还原步骤
+  renderSteps(seq, 0);
+
+  try {
+    for (let i = 0; i < seq.length; i++) {
+      const m = seq[i];
+      const ok = await animateMove(m.axis, m.layer, -m.dir, 115);
+      renderSteps(seq, i + 1);
+      if (!ok) break;
+    }
+    if (!isSolved()) hardReset();                 // 兜底，保证结果一定正确
+  } finally {
+    history = []; moveCount = 0; startTime = null; endTime = null;
+    elLast.textContent = '—';
+    elTime.textContent = '00:00.0';
+    updateHUD();
+    interactive = true;
+  }
+
+  renderSteps([], -1);
+  elProgress.textContent = '已复原 ✓';
+  toast(`已复原，共回放 ${seq.length} 步`);
 }
 
 function win() {
